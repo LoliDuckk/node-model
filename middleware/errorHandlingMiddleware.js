@@ -1,9 +1,15 @@
 const ApiError = require("../error/ApiError");
+const logger = require("../utils/logger");
 
 module.exports = function (err, req, res, next) {
-  // Логируем первопричину, чтобы не гадать по "Непредвиденная ошибка!"
-  // eslint-disable-next-line no-console
-  console.error(err);
+  logger.error("Ошибка обработки запроса:", {
+    error: err.message,
+    stack: err.stack,
+    url: req?.url,
+    method: req?.method,
+    ip: req?.ip,
+    userAgent: req?.get ? req.get('User-Agent') : req?.headers?.['user-agent']
+  });
 
   if (err instanceof ApiError) {
     return res.status(err.status).json({ message: err.message });

@@ -48,6 +48,12 @@ class UserController {
         return next(ApiError.badRequest("ФИО должно состоять ровно из 3 слов"));
       }
 
+      // Валидация пароля
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{8,}$/;
+      if (!passwordRegex.test(password)) {
+        return next(ApiError.badRequest("Пароль должен содержать минимум 8 символов, буквы верхнего и нижнего регистра, цифры"));
+      }
+
       const candidateEmail = await User.findOne({ where: { email } });
       if (candidateEmail) {
         return next(
@@ -55,7 +61,7 @@ class UserController {
         );
       }
 
-      const hashPassword = await bcrypt.hash(password, 5);
+      const hashPassword = await bcrypt.hash(password, 10);
       const user = await User.create({
         full_name: fioParts.join(" "),
         birthday,
@@ -90,7 +96,7 @@ class UserController {
         return next(ApiError.forbidden("Пользователь заблокирован"));
       }
 
-      const comparePassword = bcrypt.compareSync(password, user.password);
+      const comparePassword = await bcrypt.compare(password, user.password);
       if (!comparePassword) {
         return next(ApiError.badRequest("Указан неверный пароль"));
       }
@@ -156,19 +162,37 @@ class UserController {
     }
   }
 
-  async getAllUsers(req, res) {
+  async getAllUsers(req, res, next) {
     try {
-      const users = await User.findAll({
-        attributes: ["id", "full_name", "birthday", "email", "createdAt"],
-        raw: true,
+      const { page = 1, limit = 10 } = req.query;
+      const offset = (page - 1) * limit;
+
+      const { count, rows } = await User.findAndCountAll({
+        attributes: [
+          "id",
+          "full_name",
+          "birthday",
+          "email",
+          "role",
+          "status",
+          "createdAt",
+        ],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order: [['createdAt', 'DESC']],
       });
 
-      return res.json(users);
+      return res.json({
+        users: rows,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(count / limit)
+        }
+      });
     } catch (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ message: "Ошибка при получении пользователей" });
+      return next(err);
     }
   }
 
@@ -180,10 +204,18 @@ class UserController {
         return next(ApiError.badRequest("Некорректный id пользователя"));
       }
 
+      if (userId === req.user?.id) {
+        return next(
+          ApiError.badRequest("Невозможно заблокировать самого себя"),
+        );
+      }
+
       let blocked = true;
       if (req.body?.blocked !== undefined) {
         if (typeof req.body.blocked !== "boolean") {
-          return next(ApiError.badRequest('Поле "blocked" должно быть boolean'));
+          return next(
+            ApiError.badRequest('Поле "blocked" должно быть boolean'),
+          );
         }
         blocked = req.body.blocked;
       }

@@ -1,172 +1,187 @@
 # Node Model (Express + Sequelize + Postgres)
 
-## Запуск
+## О проекте
 
-### Требования
-- Node.js (рекомендуется LTS)
-- Postgres
+REST API приложение для управления пользователями с системой аутентификации и авторизации. Приложение предоставляет полный набор CRUD операций для пользователей, включая регистрацию, авторизацию, управление профилями и административные функции.
 
-### Установка
+## Основные возможности
+
+- **Аутентификация и авторизация**: JWT токены, защита маршрутов
+- **Управление пользователями**: Регистрация, вход, профили пользователей
+- **Ролевая система**: Разделение на обычных пользователей и администраторов
+- **Блокировка аккаунтов**: Возможность блокировки пользователей администраторами
+- **API документация**: Swagger UI для интерактивной документации
+- **Безопасность**: Rate limiting, CORS, Helmet, bcrypt хеширование
+- **Пагинация**: Оптимизированные запросы для больших объемов данных
+- **Health checks**: Мониторинг состояния приложения
+
+## Требования
+
+- Node.js 20+
+- PostgreSQL 15+
+- npm или yarn
+- Docker (опционально)
+
+## Быстрый старт
+
+### 1. Клонирование и установка
 
 ```bash
+git clone <repository-url>
+cd node-model
 npm install
 ```
 
-### Переменные окружения
+### 2. Конфигурация окружения
 
-Создайте файл `.env` в корне проекта (можно скопировать из `.env.example`).
-
-Пример (`.env.example`):
-
-```dotenv
-PORT=5000
-
-DB_NAME=node_model
-DB_USER=postgres
-DB_PASSWORD=123
-DB_HOST=localhost
-DB_PORT=5432
-
-JWT_SECRET_KEY=any_random_secret_jwt_key
-
-# Автосоздание администратора при старте (если пользователя с таким email ещё нет)
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=Admin123
-ADMIN_FULL_NAME=Ivanov Ivan Ivanovich
-ADMIN_BIRTHDAY=1970-01-01
-```
-
-### Старт сервера
-
-Dev-режим (nodemon):
+Скопируйте файл `.env.example` в `.env` и настройте переменные окружения:
 
 ```bash
+cp .env.example .env
+```
+
+Пример конфигурации:
+
+```dotenv
+# Server
+PORT=5000
+
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=node_model
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+
+# JWT
+JWT_SECRET_KEY=your_super_secret_jwt_key_here
+
+# Admin User
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=AdminPass123
+ADMIN_FULL_NAME=Admin Admin Admin
+ADMIN_BIRTHDAY=1970-01-01
+
+# API
+API_URL=http://localhost:5000
+```
+
+### 3. Запуск с Docker (рекомендуется)
+
+```bash
+# Запуск PostgreSQL и приложения
+docker-compose up -d
+
+# Или для разработки
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+### 4. Запуск локально
+
+```bash
+# Создание БД и запуск миграций
+npm run db:migrate
+
+# Запуск в режиме разработки
 npm run dev
+
+# Или production сборка
+npm start
 ```
 
-Сервер поднимается на `http://localhost:${PORT}` и использует префикс `/api`.
+## API Документация
 
-При старте выполняется:
-- `sequelize.authenticate()`
-- `sequelize.sync()`
-- автосоздание ADMIN (если заданы `ADMIN_EMAIL` и `ADMIN_PASSWORD`)
+После запуска приложения документация будет доступна по адресу:
+**http://localhost:5000/api/docs**
 
-## Функционал
+## API Endpoints
 
-### Модель пользователя
-- `full_name` — ФИО (обязательно; на регистрации проверяется, что состоит из 3 слов)
-- `birthday` — дата рождения (обязательно)
-- `email` — уникальный (обязательно)
-- `password` — пароль (хранится в виде хеша)
-- `role` — `"ADMIN"` или `"USER"`
-- `status` — `"ACTIVE"` или `"BLOCKED"`
+### Аутентификация
 
-### Правила доступа
-- **Пользователь**: использует только `GET /me` и `PATCH /me/block`
-- **Админ**: может получать пользователей по `id`, список всех пользователей, блокировать/разблокировать по `id`
-- **Заблокированный пользователь**:
-  - не может проходить авторизацию по токену (middleware проверяет `status` в БД)
-  - не может залогиниться (`POST /login` вернёт 403)
+| Метод | Endpoint                 | Описание                                | Доступ         |
+| ----- | ------------------------ | --------------------------------------- | -------------- |
+| POST  | `/api/user/registration` | Регистрация нового пользователя         | Все            |
+| POST  | `/api/user/login`        | Вход в систему                          | Все            |
+| GET   | `/api/user/auth`         | Проверка токена и обновление            | Авторизованные |
+| GET   | `/api/user/me`           | Получение профиля текущего пользователя | Авторизованные |
 
-## API
+### Управление пользователями
 
-Базовый префикс: `/api/user`
+| Метод | Endpoint              | Описание                                 | Доступ         |
+| ----- | --------------------- | ---------------------------------------- | -------------- |
+| GET   | `/api/user/me`        | Профиль текущего пользователя            | Авторизованные |
+| PATCH | `/api/user/me/block`  | Самоблокировка аккаунта                  | Авторизованные |
+| GET   | `/api/user/all`       | Список всех пользователей (с пагинацией) | Администраторы |
+| GET   | `/api/user/:id`       | Получение пользователя по ID             | Администраторы |
+| PATCH | `/api/user/:id/block` | Блокировка/разблокировка пользователя    | Администраторы |
 
-### 1) Регистрация
-`POST /registration`
+### Системные
 
-Body:
+| Метод | Endpoint      | Описание                      | Доступ |
+| ----- | ------------- | ----------------------------- | ------ |
+| GET   | `/api/health` | Проверка состояния приложения | Все    |
 
-```json
-{
-  "full_name": "Иванов Иван Иванович",
-  "birthday": "2000-01-01",
-  "email": "user@example.com",
-  "password": "pass123"
-}
+## Тестирование
+
+```bash
+# Запуск всех тестов
+npm test
+
+# Запуск с покрытием
+npm run test:coverage
+
+# Запуск только интеграционных тестов
+npm run test:integration
 ```
 
-Response:
+## Структура проекта
 
-```json
-{ "token": "..." }
+```
+node-model/
+├── controllers/          # Контроллеры приложения
+│   └── userController.js # Логика работы с пользователями
+├── middleware/           # Промежуточное ПО
+│   ├── authMiddleware.js      # Аутентификация
+│   ├── checkRoleMiddleware.js # Проверка ролей
+│   ├── errorHandlingMiddleware.js # Обработка ошибок
+│   ├── rateLimitMiddleware.js     # Ограничение запросов
+│   └── verifyToken.js             # Валидация JWT
+├── models/               # Модели базы данных
+│   └── models.js         # Определение модели User
+├── routes/               # Маршруты API
+│   ├── index.js          # Основной роутер
+│   └── userRouter.js     # Пользовательские маршруты
+├── utils/                # Утилиты
+│   ├── logger.js         # Логирование
+│   ├── swaggerOptions.js # Конфигурация Swagger
+│   └── seedAdmin.js      # Создание админа
+├── migrations/           # Миграции базы данных
+├── tests/                # Тесты
+│   ├── utils.test.js     # Unit тесты утилит
+│   ├── middleware.test.js # Тесты middleware
+│   ├── rateLimiting.test.js # Тесты rate limiting
+│   └── integration.test.js # Интеграционные тесты
+├── config/               # Конфигурация Sequelize
+│   └── config.js         # Настройки подключения к БД
+├── logs/                 # Логи приложения
+├── Dockerfile            # Docker образ
+├── docker-compose.yml    # Docker Compose
+├── jest.config.js        # Конфигурация Jest
+├── package.json          # Зависимости и скрипты
+└── README.md             # Документация
 ```
 
-### 2) Авторизация
-`POST /login`
+## Скрипты
 
-Body:
+| Команда                     | Описание                             |
+| --------------------------- | ------------------------------------ |
+| `npm run dev`               | Запуск в режиме разработки (nodemon) |
+| `npm start`                 | Production запуск                    |
+| `npm test`                  | Запуск тестов                        |
+| `npm run db:migrate`        | Запуск миграций                      |
+| `npm run db:migrate:undo`   | Откат последней миграции             |
+| `npm run db:migrate:status` | Статус миграций                      |
 
-```json
-{
-  "email": "user@example.com",
-  "password": "pass123"
-}
-```
+## 📝 Лицензия
 
-Response:
-
-```json
-{ "token": "..." }
-```
-
-### 3) Проверка токена (обновить токен)
-`GET /auth`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-Response:
-
-```json
-{ "token": "..." }
-```
-
-### 4) Получить себя
-`GET /me`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-Response: объект пользователя **без `password`**.
-
-### 5) Заблокировать себя
-`PATCH /me/block`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-Response: объект пользователя со `status: "BLOCKED"` (без `password`).
-
-### 6) Получить список пользователей (только ADMIN)
-`GET /all`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-### 7) Получить пользователя по id (только ADMIN)
-`GET /:id`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-### 8) Блокировка/разблокировка пользователя по id (только ADMIN)
-`PATCH /:id/block`
-
-Headers:
-- `Authorization: Bearer <token>`
-
-Body:
-
-```json
-{ "blocked": true }
-```
-
-или
-
-```json
-{ "blocked": false }
-```
-
-Response: объект пользователя с обновлённым `status` (без `password`).
-
+Этот проект лицензирован под MIT License - см. файл [LICENSE](LICENSE) для деталей.

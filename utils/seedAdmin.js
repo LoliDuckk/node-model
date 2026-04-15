@@ -16,7 +16,7 @@ async function seedAdmin() {
 
   const fullName = process.env.ADMIN_FULL_NAME || "Admin Admin Admin";
   const birthday = process.env.ADMIN_BIRTHDAY || "1970-01-01";
-  const hashPassword = await bcrypt.hash(password, 5);
+  const hashPassword = await bcrypt.hash(password, 10);
 
   await User.create({
     full_name: fullName,
@@ -29,4 +29,3 @@ async function seedAdmin() {
 }
 
 module.exports = { seedAdmin };
-
